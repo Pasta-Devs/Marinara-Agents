@@ -4988,13 +4988,21 @@ test("0.36.4 (#2384): spoken lines say what the person would say, and every scen
     );
     assert.ok(prompt.includes(`one piece of narration. ${SPOKEN_LINE_RULE}`), `${kind}: the spoken-line rule`);
     // 2026-11-23: a conversation runs as between real people (the maintainer: natural dialogue). #2513: and speech is
-    // said on the spot, never composed.
+    // said on the spot, never composed. 0.49.3 (#2521): how a conversation runs is the writing rules' voice paragraph
+    // now, which every scene carries, so the spoken-line rule no longer says it a second time.
     assert.ok(
       prompt.includes(
-        "Speech uses everyday words and is said on the spot, never composed like a speech or an argument, and a conversation runs as it does between real people:",
+        "Speech uses everyday words and is said on the spot, never composed like a speech or an argument, and lines may follow one another with no narration between them.",
       ),
       `${kind}: everyday words`,
     );
+    assert.ok(
+      prompt.includes(
+        "\n- No characters sound interchangeable; their voices are distinct in cadence, vocabulary, formality, and manner of expression. They speak naturally rather than in orderly turns:",
+      ),
+      `${kind}: the voice paragraph`,
+    );
+    assert.doesNotMatch(prompt, /a conversation runs as it does between real people/u, `${kind}: said once`);
     assert.doesNotMatch(prompt, /fragments, abandoned sentences|The line itself must convey/u, `${kind}: no fragments`);
     assert.ok(
       prompt.includes(

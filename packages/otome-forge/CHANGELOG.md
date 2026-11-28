@@ -1,5 +1,10 @@
 # Otome Hearth release notes
 
+## 0.49.3 — 2026-11-28
+
+- Characters sound less alike and less scripted. The story prompt's rule on how people speak is replaced with a fuller one: voices differ in cadence, vocabulary and formality, people interrupt, hesitate, dodge and chat about nothing, and being clever shows in what someone notices, not in how exactly they talk. The change reaches your story from the next scene.
+- A new love interest's or friend's bible no longer gets a way of building sentences, such as numbering their points, as a verbal habit, and its sample lines read as said on the spot. A story made earlier keeps its bibles: if someone in it keeps counting things off, edit their voice in **Your cast**.
+
 ## 0.49.2 — 2026-11-28
 
 - A love interest who comes into a scene in other clothes now changes on screen too. The scene writer was describing changes of clothes without the command that dresses the picture, so the sprite stayed in the old look. The scene writer may also put someone in night clothes before they sleep; it no longer skips straight to the next day's clothes. The changes reach your story from the next scene.

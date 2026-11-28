@@ -1,7 +1,8 @@
 // Otome Forge's scene card (M1): a secret not yet revealed never reaches a prompt, only its tells do; a revealed one is
 // something the protagonist knows; every list keeps at most 3 items and the card fits its token budget, in any
 // script. The writing rules carry the knowledge boundary only for prompts that write story. Tells are a few possible
-// signs among others, and the writing rules forbid reusing one, or a sentence, within a chapter.
+// signs among others, and the writing rules forbid reusing one, or a sentence, within a chapter. 0.49.3 (#2521): the
+// voice rule is the maintainer's paragraph, and the bible prompts ask for small tics and samples said on the spot.
 import assert from "node:assert/strict";
 import test from "node:test";
 import { estimateTextTokens } from "@forge-kit/shared-token-estimator.mjs";
@@ -10,11 +11,18 @@ import type { Bible } from "../packages/otome-forge/src/engine/packages/client/s
 import {
   SCENE_CARD_MAX_TOKENS,
   SPOKEN_LINE_RULE,
+  bibleMessages,
+  friendBibleMessages,
   otomeSceneCard,
   otomeWritingRules,
 } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/prompts.ts";
+import { normalizePlayer } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/player.ts";
 import { remapLearnedTells } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/state.ts";
-import { normalizeBible } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import {
+  normalizeBible,
+  normalizeUnit,
+} from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/unit.ts";
+import { normalizeWorld } from "../packages/otome-forge/src/engine/packages/server/src/services/otome-forge/schemas/world.ts";
 
 const THEY = { subject: "they", object: "them", possessive: "their" };
 
@@ -240,13 +248,52 @@ test("0.38.2: the writing rules balance subtext and allow jokes by rewording lin
       ),
     );
     assert.doesNotMatch(rules, /always knows where they are/u, "no line asks the model to spell everything out");
+    // 0.49.3 (#2521): the voice paragraph replaced the line that said "anyone may joke when it fits them".
     assert.ok(
-      rules.includes("never the same polished voice for all of them, and anyone may joke when it fits them."),
+      rules.includes("Leave room for ordinary chatter, affection, small complaints, and imperfect jokes;"),
       "jokes are allowed",
     );
     assert.doesNotMatch(rules, /What\?/u, "no example reaction a model could copy");
   }
   assert.ok(SPOKEN_LINE_RULE.includes("; it can be a single word or a few sentences, whatever they would really say."));
+});
+
+test("0.49.3 (#2521): voices are distinct and unscripted, and a bible's tics are small habits, with no example", () => {
+  // In a story set up on 2026-11-23 each love interest's bible had a tic that numbers his points and an angry sample
+  // that counts things off. Messages and every scene send those lines, and a line about one man outweighs the general
+  // ban on counted points, so both men kept tallying and sounded alike. The voice rule is the maintainer's own
+  // paragraph, word for word (2026-11-28); the protagonist's sentence after it is the old line's.
+  const VOICE =
+    "- No characters sound interchangeable; their voices are distinct in cadence, vocabulary, formality, and manner of expression. They speak naturally rather than in orderly turns: they react selectively, interrupt, hesitate, self-correct, misunderstand, dodge, change subjects, or leave things unsaid. They assume shared context and follow what catches attention. Let what they notice, feel, and physically do affect what they say as they speak. Leave room for ordinary chatter, affection, small complaints, and imperfect jokes; every line needn’t convey information, advance the scene, or sound clever. Emotion, personality, intelligence (or the lack of it), relationships, and circumstances shape speech itself, including its syntax, clarity, volume, and composure. Smart shows in what they notice, never in sounding like a robot. The protagonist is just as human: they can be silly, clumsy with words, flustered or plain wrong, and the choices they are offered are plain too, not riddles, and not always the sensible one.";
+  for (const story of [true, false]) {
+    const rules = otomeWritingRules({ story });
+    assert.ok(rules.includes(`\n${VOICE}\n`), "the paragraph and the protagonist's sentence are one rule");
+    assert.doesNotMatch(rules, /People speak the way their life taught them|a scholar like one/u, "replaced, not kept");
+  }
+  // The clause the paragraph covers left the spoken-line rule; the rest of it is as it was.
+  assert.equal(
+    SPOKEN_LINE_RULE,
+    "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it can be a single word or a few sentences, whatever they would really say. Speech uses everyday words and is said on the spot, never composed like a speech or an argument, and lines may follow one another with no narration between them.",
+  );
+  // A new bible: a tic is a small habit of word or sound, never a way of building a line, and a sample is said on the
+  // spot. The voice line names no habit and quotes no line (the maintainer: a model fixates on an example).
+  const world = normalizeWorld({ setting: "A harbour city lit by lanterns." });
+  const player = normalizePlayer({ name: "Ines" });
+  const member = { unit: { ...normalizeUnit({}), id: "li-kai-ab12", name: "Kai", pronouns: THEY } };
+  const voiceLines = (messages: Array<{ content: string }>) =>
+    messages[0]!.content.split("\n").filter((line) => line.startsWith("- voice.register:"));
+  const EXAMPLE = /["“”‘]|such as|for example|e\.g\./u;
+  for (const [kind, lines] of Object.entries({
+    "love interest": voiceLines(bibleMessages({ world, player, member, others: [] })),
+    friend: voiceLines(friendBibleMessages({ world, player, member, lis: [], scenes: "" })),
+  })) {
+    assert.equal(lines.length, 1, kind);
+    const line = lines[0]!;
+    assert.ok(line.includes(" tics: small verbal habits of word or sound, never a way of building a line. "), kind);
+    assert.ok(line.endsWith(", in their voice, said on the spot."), kind);
+    assert.doesNotMatch(line, EXAMPLE, `${kind}: no example to copy`);
+  }
+  for (const text of [VOICE, SPOKEN_LINE_RULE]) assert.doesNotMatch(text, EXAMPLE, "no quoted line to copy");
 });
 
 test("tells are a few possible signs among others, and the writing rules ask for variety without repeats", () => {
