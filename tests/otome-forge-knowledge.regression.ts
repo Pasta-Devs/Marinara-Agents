@@ -427,12 +427,15 @@ test("a scene knows what the protagonist wears in it, as it does a love interest
 // banned in narration only, so every prompt with them moved.
 // 2026-11-27 (#2513): whole sentences are narration's alone, speech is said on the spot, two stiff patterns are banned
 // everywhere and flourishes of speech join the tells, so every prompt with the writing rules or the spoken-line rule moved.
+// 2026-11-28 (#2521): the writing rules' voice line is the maintainer's paragraph on distinct, natural voices, and the
+// spoken-line rule loses the clause it covers, so every prompt with the writing rules or the spoken-line rule moved. The bible's voice
+// field also asks for small tics and samples said on the spot.
 const STAGING_OTHERS: Record<string, string> = {
-  scene: "cdc3e9590025bb8b",
-  callScene: "2d98df83d74203d7",
-  confrontation: "dc2f1881063c565d",
-  closer: "306f0b56762f75af",
-  bible: "3eb66e87b8f59bda",
+  scene: "dabd410468be0055",
+  callScene: "78227962f044f165",
+  confrontation: "3f6725a48c3ad87f",
+  closer: "eee6a4448dad7553",
+  bible: "5017d1b302086cd2",
   // #2156: P17's one exception to "no meeting the story must keep", his invitation to clear the air.
   // 0.20.2: P17 is cached: the same words, its user part split before the thread now, so both digests moved.
   // 2026-11-14 (0.29.0): P17's HARD RULES gained the no-echo line and the plain-texting line, so both moved again.
@@ -441,12 +444,12 @@ const STAGING_OTHERS: Record<string, string> = {
   // exception names his date invitations too, so both moved again.
   // 2026-11-27 (#2504): P17 in his own thread gained the [note: …] line (and [selfie: …] with scene art), so both moved
   // again.
-  chat: "af220125bcc5e788",
-  daily: "6afcd31a0c237023",
-  note: "6b16cf8779085121",
+  chat: "de8dc83fa6e70ce4",
+  daily: "921c9bbd71686aef",
+  note: "c2982d86d1652c73",
   // Retaken 2026-11-05 when the outfit and world fixes shipped together in 0.8.7: the date plan lost its WHAT THEY
   // WEAR block (now in protagonistBlock), its only change from staging; it still never reads the premise (above).
-  datePlan: "8079e233b7d016a5",
+  datePlan: "25dce7a9b6c156e3",
 };
 
 test("only the arc and chapter planners read the premise, for its world alone; the world plan keeps it (0.8.7)", () => {

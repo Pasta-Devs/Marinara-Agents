@@ -173,11 +173,13 @@ const digest = (messages: Array<{ role: string; content: string }>) =>
 // banned in narration only, so every prompt with them moved.
 // 2026-11-27 (#2513): whole sentences are narration's alone, speech is said on the spot, two stiff patterns are banned
 // everywhere and flourishes of speech join the tells, so every prompt with the writing rules or the spoken-line rule moved.
+// 2026-11-28 (#2521): the writing rules' voice line is the maintainer's paragraph on distinct, natural voices, and the
+// spoken-line rule loses the clause it covers, so every prompt with the writing rules or the spoken-line rule moved.
 const BEFORE_SEASONS: Record<wish.BannerKind, string> = {
-  memories: "ae98c02754b462c9",
-  "his-wardrobe": "23bbed1b8942b85f",
-  "my-wardrobe": "78c0fca4366a02ef",
-  dates: "b979af55cbbfea06",
+  memories: "f28ad501c1690086",
+  "his-wardrobe": "9ea281ce0897d625",
+  "my-wardrobe": "8de59df4309b34ac",
+  dates: "29e24ec1682d31ad",
 };
 
 test("a rotation that is not seasonal sends the P20 prompt it sent before seasons", () => {

@@ -716,6 +716,12 @@
     "otome-forge": {
       "versions": [
         {
+          "version": "0.49.3",
+          "date": "2026-11-28",
+          "notes": "- Characters sound less alike and less scripted. The story prompt's rule on how people speak is replaced with a fuller one: voices differ in cadence, vocabulary and formality, people interrupt, hesitate, dodge and chat about nothing, and being clever shows in what someone notices, not in how exactly they talk. The change reaches your story from the next scene.\n- A new love interest's or friend's bible no longer gets a way of building sentences, such as numbering their points, as a verbal habit, and its sample lines read as said on the spot. A story made earlier keeps its bibles: if someone in it keeps counting things off, edit their voice in **Your cast**.",
+          "highlight": false
+        },
+        {
           "version": "0.49.2",
           "date": "2026-11-28",
           "notes": "- A love interest who comes into a scene in other clothes now changes on screen too. The scene writer was describing changes of clothes without the command that dresses the picture, so the sprite stayed in the old look. The scene writer may also put someone in night clothes before they sleep; it no longer skips straight to the next day's clothes. The changes reach your story from the next scene.",
@@ -828,12 +834,6 @@
           "date": "2026-11-23",
           "notes": "- The bottom bar's **Dates** is now **Games**, and so is its page, with \"Just the two of you.\" still under the title. Read Them, Read Me and Tarot night name it above their title too. **Dates** now means only the dates you win on Wish's Dates banner and plan from Album → Dates.",
           "highlight": false
-        },
-        {
-          "version": "0.39.0",
-          "date": "2026-11-20",
-          "notes": "- Love interests can ask you on dates in Messages. **Settings → Connections → Date invitations each week** sets how often (0, the default, turns it off). The one you've spent the fewest scenes with lately asks. **Accept** lets you pick your look and a gift, then they choose where you go and what you do: three scenes, paid as any new date.\n- What you write in Messages can hurt them, in their thread or in **Everyone**. A serious hurt is their grievance against you, as one from the story is, and they need space until you make it right in Routes. A milder one is remembered and costs 15 affection.\n- Setup's **Connections** step asks how often they write on their own: messages each day, group chat squabbles each day and date invitations each week.",
-          "highlight": true
         }
       ]
     },

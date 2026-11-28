@@ -850,10 +850,11 @@ test("every other chapter's P6 is byte for byte the builder's from before his si
   // Retaken 2026-11-23 (dialogue): spoken lines run like real conversation; narration in whole sentences, in order.
   // Retaken 2026-11-23 (bans): the built-in sentence patterns are banned in narration only.
   // Retaken 2026-11-27 (#2513): the writing rules and the spoken-line rule are reworded for speech said on the spot.
-  assert.equal(sha(mainMessages), "4a48df67d86b754ac860303f7f4bc9e4f16c6c0256cee097260e355b61881c92", "a main chapter");
+  // Retaken 2026-11-28 (#2521): the voice line is the maintainer's paragraph; the spoken-line rule loses its clause.
+  assert.equal(sha(mainMessages), "a76583ca10ded152ad3549b88aad85844283c9d89eb919f3810ec8611b2cb482", "a main chapter");
   assert.equal(
     sha(beatMessages({ ...common, chapter: story, node: story.nodes[0]!, storySoFar: [], hisSide: "A SCENE" })),
-    "06e5eb79be9b1256029ac8996da4cc2d5e6c6df6b1af4241697b5ad49d3ff57a",
+    "5050f0112c88c78f96755558970f4238f4ed38aa426f3e92cb408810b3eca929",
     "a Character Story, even with a scene handed to it",
   );
 });

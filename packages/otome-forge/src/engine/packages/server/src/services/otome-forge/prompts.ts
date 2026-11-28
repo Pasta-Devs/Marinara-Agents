@@ -418,7 +418,10 @@ export const WRITING_RULES = [
   // #2513: "whole sentences, in the order things happen" was always narration's (2026-11-23); read as written it bound
   // speech too, and nobody talks in whole sentences.
   "Write in plain, everyday words: say what happens and what it means without ornate metaphors, stacked adjectives or vocabulary a reader would have to stop at, and let a character stay ordinary if they are ordinary. Narration runs in whole sentences, in the order things happen.",
-  "People speak the way their life taught them: a common man sounds like one, a scholar like one, a sharper like one, each with their own words, rhythm and education, never the same polished voice for all of them, and anyone may joke when it fits them. The protagonist is just as human: they can be silly, clumsy with words, flustered or plain wrong, and the choices they are offered are plain too, not riddles, and not always the sensible one.",
+  // 0.49.3 (#2521): the maintainer's own paragraph, word for word (2026-11-28), replaces "People speak the way their
+  // life taught them…": two scholars' bibles both got "numbers his points" and every line carried a tally, so "smart"
+  // was being written as exact figures. Keep it verbatim. The protagonist's sentence after it is the old line's.
+  "No characters sound interchangeable; their voices are distinct in cadence, vocabulary, formality, and manner of expression. They speak naturally rather than in orderly turns: they react selectively, interrupt, hesitate, self-correct, misunderstand, dodge, change subjects, or leave things unsaid. They assume shared context and follow what catches attention. Let what they notice, feel, and physically do affect what they say as they speak. Leave room for ordinary chatter, affection, small complaints, and imperfect jokes; every line needn’t convey information, advance the scene, or sound clever. Emotion, personality, intelligence (or the lack of it), relationships, and circumstances shape speech itself, including its syntax, clarity, volume, and composure. Smart shows in what they notice, never in sounding like a robot. The protagonist is just as human: they can be silly, clumsy with words, flustered or plain wrong, and the choices they are offered are plain too, not riddles, and not always the sensible one.",
   // #2513: "and flourishes of speech": a grand manner in the bible's voice was performed in every line.
   "A love interest's tells, tics, habits and flourishes of speech are a few possible signs among many, never all they do: show one only now and then, among other, fresh reactions, and never reuse the same one, or a sentence already written, within a chapter.",
   // 0.36.3: the maintainer removed "Write what the protagonist feels in their body when something happens to them, not
@@ -1089,7 +1092,7 @@ export function bibleMessages({
     "- wound: the old hurt. ghost: the event behind it. lie: the false belief they live by. want: what they chase. need: what would heal them. fear: what they dread.",
     "- mask.presents: the face they show, which may hide something kinder or something worse; mask.tells: 3 to 5 small behaviours that betray what is under it. trueSelf.is and showsWhen: who they are, and the moments it shows.",
     "- moralCode: the code they live by, true to who they are: firm for a good person, far looser for a bad one, or none at all. redLines: what that code forbids them, if anything ([] when nothing does). darkness.kinds: the kinds of darkness in them, as dark as the card or archetype makes them within this story's Darkness, never softened: what they are (cruelty, a hunger for control), never a secret's events, which belong in secrets.",
-    "- voice.register: how they speak. tics: verbal habits. never: what they never say or do. careLanguage: how they show care. angerStyle, jealousyStyle: how anger and jealousy come out. samples: one line each, guarded, tender and angry, in their voice.",
+    "- voice.register: how they speak. tics: small verbal habits of word or sound, never a way of building a line. never: what they never say or do. careLanguage: how they show care. angerStyle, jealousyStyle: how anger and jealousy come out. samples: one line each, guarded, tender and angry, in their voice, said on the spot.",
     "- web: one entry for each other love interest, keyed by that love interest's exact id: shared history, stance, what is owed, and optionally a secret (omit it when there is none).",
     `- secrets: 2 to 4, each with a short unique id, the truth, 2 to 4 tells (behaviour that hints at it without stating it), and revealAt.stage from 2 to 6. At least one secret has revealAt.stage 4 (the Wound), and one of them carries the piece of the mystery they hold.`,
     '- arc: one entry for each stage "1" to "6" (Mask, Crack, Pull, Wound, Reckoning, Bond): wantsFromHer is what they want from the protagonist at that stage, whatever the protagonist\'s gender; seed is a story seed for that stage.',
@@ -1185,7 +1188,7 @@ export function friendBibleMessages({
     "FIELDS",
     "- howWeMet: how they and the protagonist know each other. publicFace: how the world sees them. personality: who they are, in two or three sentences.",
     "- wound, want, need, fear: the old hurt, what they chase, what would heal them, what they dread; their own growth comes from these.",
-    "- voice.register: how they speak. tics: verbal habits. samples: one line each, warm, teasing and worried, in their voice.",
+    "- voice.register: how they speak. tics: small verbal habits of word or sound, never a way of building a line. samples: one line each, warm, teasing and worried, in their voice, said on the spot.",
     '- growth: one entry for each rank "1" to "5" of the friendship: what that rank of it explores, about them and between the two of them. "5" is the finale of their story with her.',
     "- onLis: one entry for each love interest, keyed by that love interest's exact id: stance is ships (wants her with them), supports, wary or against; why is their reason, in one sentence. onHer: how they feel about her love life as a whole, for example worried, cheering her on or protective.",
     "- arcana: the Major Arcana card that fits them. look: English only, visual-only comma-separated tags. identityLine: face, hair, eyes, build, skin, marks, with adult features. outfitLine: their everyday clothing in this world. presentation: how to draw them, man, woman or person.",
@@ -2453,10 +2456,11 @@ export const BEAT_WORDS_MAX = 950;
  * maintainer's, kept from the dialogue rule they removed from the writing rules. 0.38.2 (the maintainer's pick): a line
  * may also be a single word, as people really react, so a surprise need not be wrapped in a sentence. #2513: "said on
  * the spot, never composed": on Mythos 5.2 lines still read written, with mirrored pairs and counted points. It names no
- * fragments or stutters, which 0.36.4 removed for making every line a one-liner.
+ * fragments or stutters, which 0.36.4 removed for making every line a one-liner. 0.49.3 (#2521): "a conversation runs as
+ * it does between real people…" moved out; the writing rules' voice paragraph covers it.
  */
 export const SPOKEN_LINE_RULE =
-  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it can be a single word or a few sentences, whatever they would really say. Speech uses everyday words and is said on the spot, never composed like a speech or an argument, and a conversation runs as it does between real people: they react to what was just said, chat about small things or say something silly, and lines may follow one another with no narration between them.";
+  "A spoken line is what that person would really say at that moment, to the people there, about what is happening, so the reader always understands what they mean; it can be a single word or a few sentences, whatever they would really say. Speech uses everyday words and is said on the spot, never composed like a speech or an argument, and lines may follow one another with no narration between them.";
 
 // Under NSFW: Explicit, sex is never rushed (HEAT_TEXT, Shared blocks), so a node or a Closer's opened ending that
 // reaches it gets more room (CLOSER_INTIMATE_ENDING_MAX is in S/story/replies.ts). Each fits the reply's budget
