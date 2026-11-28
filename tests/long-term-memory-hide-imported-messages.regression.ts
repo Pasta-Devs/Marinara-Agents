@@ -61,6 +61,7 @@ async function main() {
     { configurePackageRuntime },
     {
       previewPackageInterop,
+      pieceTitle,
       importPackageInterop,
       hideImportedChatMessages,
       hideImportedMessagesAfterReview,
@@ -73,6 +74,7 @@ async function main() {
     { LongTermMemoryStorage },
     { updateLtmGlobalSettings, getLtmGlobalSettings },
     { LongTermMemoryDraftStore },
+    { extractionFingerprintForLtmSourceNote },
   ] = await Promise.all([
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/package-runtime.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/sources/interop.ts"),
@@ -80,6 +82,7 @@ async function main() {
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/persistence/storage.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/settings.ts"),
     import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/drafts/draft-store.ts"),
+    import("../packages/long-term-memory/src/engine/packages/server/src/services/long-term-memory/extraction/source-hash.ts"),
   ]);
 
   const dataDir = await mkdtemp(join(tmpdir(), "marinara-ltm-hide-imported-"));
@@ -828,6 +831,165 @@ async function main() {
         "the show records nothing",
       );
 
+      // 15. Issue #2519: with a branch picked, the Sources list also has the parent's imported piece whose copies the
+      // branch records as hidden, so the branch's inherited messages are accounted for.
+      const grouped = (id: string, name: string, metadata: Record<string, unknown> = {}) => ({
+        ...chat,
+        id,
+        name,
+        groupId: "group-listed",
+        metadata: { summaryTailMessages: 0, ...metadata },
+      });
+      const listedParent = grouped("chat-listed-parent", "Listed parent");
+      const listedBranch = grouped("chat-listed-branch", "Listed branch", {
+        branchParentChatId: listedParent.id,
+        branchParentMessageId: "lp3",
+        branchMessageId: "lb3",
+      });
+      const listedSibling = grouped("chat-listed-sibling", "Listed sibling");
+      const listedMessage = (chatId: string, id: string, second: number, extra: Record<string, unknown> = {}) => ({
+        ...message(chatId, id, extra),
+        content: `${id} said something.`,
+        createdAt: `2026-11-01T00:00:0${second}.000Z`,
+      });
+      // lp2 was hidden by hand, so the parent's piece skips it.
+      const listedParentRows = [
+        listedMessage(listedParent.id, "lp1", 1),
+        listedMessage(listedParent.id, "lp2", 2, { hiddenFromAI: true, visibilityManual: true }),
+        listedMessage(listedParent.id, "lp3", 3),
+      ];
+      chats.push(listedParent);
+      messagesByChat.set(listedParent.id, listedParentRows);
+      const parentPieceId = `${listedParent.id}:messages:lp1`;
+      await importPackageInterop(
+        { source: "messages", chatId: listedParent.id, sourceIds: [parentPieceId], extract: true, limit: 100 },
+        root,
+        new AbortController().signal,
+      );
+      await hideImportedChatMessages(root, [listedParent.id]);
+      const listedBranchRows = listedParentRows.map((row, index) => ({
+        ...row,
+        id: `lb${index + 1}`,
+        chatId: listedBranch.id,
+        extra: { ...row.extra },
+      }));
+      chats.push(listedBranch, listedSibling);
+      messagesByChat.set(listedBranch.id, listedBranchRows);
+      messagesByChat.set(listedSibling.id, [listedMessage(listedSibling.id, "ls1", 6)]);
+      await hideImportedChatMessages(root, [listedBranch.id]);
+      listedBranchRows.push(listedMessage(listedBranch.id, "lb4", 4), listedMessage(listedBranch.id, "lb5", 5));
+      const listedPreview = (branchChatId: string, options?: { ownPiecesOnly: boolean }) =>
+        previewPackageInterop(
+          {
+            source: "messages",
+            sourceScope: {
+              groupId: "group-listed",
+              chatIds: [listedParent.id, listedBranch.id, listedSibling.id, "chat-listed-twin"],
+            },
+            branchChatId,
+            limit: 100,
+          },
+          root,
+          options,
+        );
+      const listed = async (branchChatId: string, options?: { ownPiecesOnly: boolean }) =>
+        (await listedPreview(branchChatId, options)).samples;
+      const { samples: branchRows, totals: branchTotals } = await listedPreview(listedBranch.id);
+      assert.deepEqual([branchTotals.matches, branchTotals.imported], [2, 1], "the totals count the parent's row");
+      assert.deepEqual(
+        branchRows.map(({ sourceId, status }) => [sourceId, status]),
+        [
+          [`${listedBranch.id}:messages:lb4`, "pending"],
+          [parentPieceId, "imported"],
+        ],
+        "the branch lists the parent's imported piece beside its own new messages",
+      );
+      assert.deepEqual(
+        (await listed(listedSibling.id)).map(({ sourceId }) => sourceId),
+        [`${listedSibling.id}:messages:ls1`],
+        "a sibling with no hidden record for that piece does not get it",
+      );
+      // The record alone is not enough: a chat of another group with the same record does not get the row.
+      const listedOutsider = { ...grouped("chat-listed-outsider", "Listed outsider"), groupId: "group-other" };
+      chats.push(listedOutsider);
+      messagesByChat.set(listedOutsider.id, []);
+      const listedRecords = await readLtmHiddenMessages(root);
+      await writeLtmHiddenMessages({ ...listedRecords, [listedOutsider.id]: listedRecords[listedBranch.id]! }, root);
+      assert.deepEqual(await listed(listedOutsider.id), [], "a chat of another group does not get it either");
+      await writeLtmHiddenMessages(listedRecords, root);
+      assert.deepEqual(
+        (await listed(listedBranch.id, { ownPiecesOnly: true })).map(({ sourceId }) => sourceId),
+        [`${listedBranch.id}:messages:lb4`],
+        "background import still reads only the branch's own pieces",
+      );
+      // A piece that skips messages is titled by what it holds; its stored range stays first to last.
+      const parentRow = branchRows.find((row) => row.sourceId === parentPieceId)!;
+      assert.equal(parentRow.title, "Listed parent, messages 1, 3");
+      assert.deepEqual(parentRow.messageRange, { chatName: "Listed parent", first: 1, last: 3 });
+      // A piece read before 1.6.0 has no text hash and the first-to-last title; the new title alone is no update.
+      const listedNote = (await storage.listNotes()).find((note) => note.provenance?.entryId === "lp1")!;
+      const legacyNote = { ...listedNote, title: "Listed parent, messages 1-3" };
+      const { textHash: _textHash, ...legacyFingerprint } = extractionFingerprintForLtmSourceNote(legacyNote);
+      await storage.updateNote(listedNote.id, { title: legacyNote.title, extractionFingerprint: legacyFingerprint });
+      assert.equal(
+        (await listed(listedBranch.id)).find((row) => row.sourceId === parentPieceId)?.freshness,
+        "current",
+        "a legacy read stays current under the new title",
+      );
+      listedParentRows[2]!.content = "lp3 said something else.";
+      listedBranchRows[2]!.content = "lp3 said something else.";
+      assert.equal(
+        (await listed(listedBranch.id)).find((row) => row.sourceId === parentPieceId)?.freshness,
+        "source_updated",
+        "and an edit still shows it as updated",
+      );
+      // Two imported pieces with identical text share one row. The branch gets the one whose note it records.
+      const listedTwin = grouped("chat-listed-twin", "Listed twin");
+      chats.push(listedTwin);
+      messagesByChat.set(
+        listedTwin.id,
+        listedParentRows.map((row, index) => ({
+          ...listedMessage(
+            listedTwin.id,
+            `lt${index + 1}`,
+            index + 1,
+            index === 1 ? { hiddenFromAI: true, visibilityManual: true } : {},
+          ),
+          content: row.content,
+        })),
+      );
+      const twinPieceId = `${listedTwin.id}:messages:lt1`;
+      await importPackageInterop(
+        { source: "messages", chatId: listedTwin.id, sourceIds: [twinPieceId], extract: true, limit: 100 },
+        root,
+        new AbortController().signal,
+      );
+      const twinNote = (await storage.listNotes()).find((note) => note.provenance?.entryId === "lt1")!;
+      const beforeTwin = await readLtmHiddenMessages(root);
+      for (const [noteId, pieceId] of [
+        [listedNote.id, parentPieceId],
+        [twinNote.id, twinPieceId],
+      ] as const) {
+        await writeLtmHiddenMessages({ ...beforeTwin, [listedBranch.id]: { [noteId]: ["lb1", "lb3"] } }, root);
+        assert.deepEqual(
+          (await listed(listedBranch.id)).filter(({ status }) => status !== "pending").map(({ sourceId }) => sourceId),
+          [pieceId],
+          "the branch keeps the identical piece it records, whichever comes first",
+        );
+      }
+      await writeLtmHiddenMessages(beforeTwin, root);
+
+      // A list too long for a title ends at a whole range, and a very long chat name never leaves half a number.
+      const scattered = {
+        first: 101,
+        last: 299,
+        ranges: Array.from({ length: 100 }, (_, index): [number, number] => [101 + 2 * index, 101 + 2 * index]),
+      };
+      const cappedTitle = pieceTitle("Long", scattered);
+      assert.ok(cappedTitle.length <= 240);
+      assert.match(cappedTitle, /^Long, messages 101(, \d{3})+, …$/);
+      assert.equal(pieceTitle("n".repeat(228), scattered), `${"n".repeat(228)}, messages`);
+
       // 4. Turning the setting off shows exactly the owned messages; m2 and the user's m4 stay hidden, and so does
       // the branch's hand-hidden b3.
       await updateLtmGlobalSettings({ longTermMemoryHideImportedMessages: false }, root);
@@ -840,7 +1002,7 @@ async function main() {
     [() => releaseRuntime?.(), () => rm(dataDir, { recursive: true, force: true })],
   );
   process.stdout.write(
-    "Long-Term Memory hide imported messages regression: off by default, tail, ownership, re-preview, tail drift, manual choices, archive and delete, waiting for review, branch copies and tail, branch hook, hand-hidden branch tail, branches of branches, records an older build wrote, copies an ancestor showed itself, global tail, and missing host method ok\n",
+    "Long-Term Memory hide imported messages regression: off by default, tail, ownership, re-preview, tail drift, manual choices, archive and delete, waiting for review, branch copies and tail, branch hook, hand-hidden branch tail, branches of branches, records an older build wrote, copies an ancestor showed itself, global tail, branch Sources list, and missing host method ok\n",
   );
 }
 

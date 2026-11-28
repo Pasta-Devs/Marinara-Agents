@@ -118,6 +118,8 @@ async function pendingSources({ root, chatId, mode }: Job, sourceScope: LtmScope
         ...(cursor ? { cursor } : {}),
       },
       root,
+      // A parent's piece listed under this branch must not pass for the open piece or be imported here.
+      { ownPiecesOnly: true },
     );
     samples.push(...page.samples);
     cursor = page.nextCursor;

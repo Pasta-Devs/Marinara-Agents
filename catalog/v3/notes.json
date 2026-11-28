@@ -428,6 +428,12 @@
     "long-term-memory": {
       "versions": [
         {
+          "version": "1.6.13",
+          "date": "2026-11-28",
+          "notes": "- In Sources, filtering Chat Messages to a branch now also lists the imported pieces from a parent chat whose messages are hidden in that branch. You can extract them again or delete them from there. A piece that skips messages now names only the message numbers it holds in its title, such as \"messages 1-4, 9-12\". The count and range on its row still run from its first message to its last.",
+          "highlight": false
+        },
+        {
           "version": "1.6.12",
           "date": "2026-11-28",
           "notes": "- The Review count now includes memories that a read could not save, so it may go up after this update on installs that already have some in Review. The memories the read did save still apply as before.",
@@ -539,12 +545,6 @@
           "version": "1.5.24",
           "date": "2026-11-01",
           "notes": "- An Agent that adds memories can ask recall to leave out what it added itself, so its own facts do not come back as new.",
-          "highlight": false
-        },
-        {
-          "version": "1.5.23",
-          "date": "2026-11-01",
-          "notes": "- Slurp can add memories when you allow it in Memory Settings → Sharing. Off by default.",
           "highlight": false
         }
       ]
