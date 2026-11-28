@@ -180,13 +180,17 @@ test("#2509: the scene writer dresses them from the chapter's looks by name; a c
     t.calls.filter((call) => !isPlanner(call.messages) && nodeOf(call.messages) === i).at(-1)!;
   const first = whole(scene(0).messages);
   // The rule once, in the instructions every scene of the chapter shares; the lists by name in the scene's own part.
-  assert.match(scene(0).messages[1]!.content, /- wear: in a node where someone has changed clothes, "wear": \{/);
-  assert.match(first, /Going to sleep and waking is one change: into what they wear once they are up/);
+  assert.match(
+    scene(0).messages[1]!.content,
+    /- wear: everyone in this node who is in other clothes than they wear now/,
+  );
+  // The shape carries `wear`, so a model that copies it never leaves a change of clothes in the prose alone.
+  assert.match(scene(0).messages[1]!.content, /"place": "\.\.\."\}\], "wear": \{\}\}\n/);
   assert.match(
     first,
     /\nWHAT THEY WEAR\n- Ines, in "everyday" now; their looks: "everyday", "Lantern Dress"\.\n- Kai, in "everyday" now; their looks: "everyday", "Harbour Night"\./,
   );
-  assert.match(first, /such as "choices", "effects", "cg", "voices" or "wear"\): \{/);
+  assert.match(first, /such as "choices", "effects", "cg" or "voices"\): \{.*, "wear": \{\}\}/);
   assert.doesNotMatch(first, /HIS-LOOK|HER-LOOK|Pier Shirt/, "names only, never a Home look or an unpainted one");
   // Only Kai's change is kept: an unknown look, someone not in the scene and a stranger are dropped.
   const saved = (i: number) => t.store.readDoc(beatId(t.runId, "main-1", i), normalizeBeat);

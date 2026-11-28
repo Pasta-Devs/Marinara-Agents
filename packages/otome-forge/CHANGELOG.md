@@ -1,5 +1,9 @@
 # Otome Hearth release notes
 
+## 0.49.2 — 2026-11-28
+
+- A love interest who comes into a scene in other clothes now changes on screen too. The scene writer was describing changes of clothes without the command that dresses the picture, so the sprite stayed in the old look. The scene writer may also put someone in night clothes before they sleep; it no longer skips straight to the next day's clothes. The changes reach your story from the next scene.
+
 ## 0.49.1 — 2026-11-27
 
 - Characters speak less like a script. Four lines of the story prompt are reworded: speech is said on the spot and no longer has to come in whole sentences, counted points ("One… Two…") and mirrored pairs ("You have X, and I have Y") are banned, and a love interest's grand way of talking shows only now and then. The change reaches your story from the next scene.
