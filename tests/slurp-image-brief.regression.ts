@@ -243,7 +243,7 @@ assert.doesNotMatch(slurpImageNegativePrompt("none", true) ?? "", /second person
 assert.match(images, /Put one in the picture only when the post or the scene calls for them/u);
 assert.match(images, /slurpCompanionReferenceImages\([^)]*finalPrompt,/u);
 // A companion's picture goes along even when the Creator has no picture of their own (0.4.16, player report).
-assert.match(images, /companionRefs = input\.settings\.imageGenerationUseAvatarReferences && allowAvatarReferences;/u);
+assert.match(images, /companionRefs = input\.settings\.imageGenerationUseAvatarReferences && allowReferences;/u);
 assert.match(images, /if \(referenceImages\?\.length \|\| \(companionRefs && inPicture\.length\)\)/u);
 assert.match(
   slurp2Source("packages/slurp2/src/engine/packages/server/src/slp/features/media/slp-image-companions.ts"),
