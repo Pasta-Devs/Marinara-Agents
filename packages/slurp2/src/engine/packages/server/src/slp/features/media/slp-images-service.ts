@@ -30,6 +30,7 @@ import { loadPrompt, NOODLE_IMAGE_POST } from "../../../services/prompt-override
 import { generateSlpImageWithRetry } from "../../base/media/slp-image-retry.js";
 import { rewriteSlpImagePrompt } from "../../base/media/slp-image-prompt-rewrite.js";
 import { slpImageReferencesSupported } from "../../base/media/slp-image-references.js";
+import { resolveSlurpLoreImageReferences } from "../../data/host/slp-lore-context.js";
 import { resolveImageAppearance } from "./slp-appearance-service.js";
 import { resolveSlurpImageCompanions, slurpCompanionReferenceImages } from "./slp-image-companions.js";
 import { newSlurpImageRun, recordSlurpImageRun, slurpImageRunStyle, trackSlurpImageAttempt } from "./slp-image-run.js";
@@ -124,6 +125,7 @@ type CreatorPostImageInput = {
     | "imageGenerationPrompt"
     | "imagePromptInterpretation"
     | "imageGenerationUseAvatarReferences"
+    | "enableLorebookContext"
     | "imageKeepOriginalFiles"
     | "imageOnePerson"
     | "imageGenerationIncludeDescriptions"
@@ -189,7 +191,7 @@ type CreatorPostImageResult = {
   metadata: Record<string, unknown>;
   preview: Omit<SlpImagePromptReviewItem, "id"> | null;
   stagedMedia: StagedGalleryImage | null;
-  /** Exact positive prompt sent to the image provider. Also stored as `metadata.imageProviderPrompt`. */
+  /** Reusable positive prompt, also stored as `metadata.imageProviderPrompt`. Lorebook guidance is added per request. */
   providerPrompt: string;
 };
 
@@ -250,7 +252,7 @@ async function generateCreatorPostImageRun(
     createConnectionsStorage(input.db),
     input.imageConnection.id,
   );
-  const allowAvatarReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
+  const allowReferences = slpImageReferencesSupported(input.imageConnection, imageFallback);
   run.connection.hasFallback = Boolean(imageFallback);
   run.connection.fallback = imageFallback
     ? { id: imageFallback.connectionId, name: imageFallback.connectionName, model: imageFallback.model || null }
@@ -362,7 +364,7 @@ async function generateCreatorPostImageRun(
         }
         if (
           input.settings.imageGenerationUseAvatarReferences &&
-          allowAvatarReferences &&
+          allowReferences &&
           referenceResolution.referenceImages.length > 0
         ) {
           referenceImages = Array.from(new Set(referenceResolution.referenceImages)).slice(0, 6);
@@ -436,12 +438,7 @@ async function generateCreatorPostImageRun(
     userInstructions: input.settings.imageGenerationPrompt,
     characterDescription: "",
     characterImageInstructions,
-    // Empty on purpose. The default template concatenates this straight into the prompt the image
-    // provider receives, and "arrogant, impatient with staged sentimentality" is not a visual
-    // fact — it is noise a diffusion model still tries to draw. The rewrite already treats
-    // personality as private context that must never appear in a visual prompt; the template that
-    // produces the fallback prompt should not be the one place that disagrees. A custom template
-    // that genuinely wants it can still read the character card.
+    // The fallback template sends these fields to the image provider. Keep nonvisual personality out.
     characterPersonality: "",
   });
   const compileStyled = (prompt: string) =>
@@ -464,9 +461,7 @@ async function generateCreatorPostImageRun(
   // style values the prompt already carries, so an approved prompt is never double-styled.
   const overridePrompt = input.promptOverride?.prompt.trim();
   const compiledOverride = overridePrompt ? compileStyled(overridePrompt) : null;
-  // The rewrite is skipped when interpretation is off and discarded when it leaks, and both land on
-  // this fallback. Sending the bare draft there dropped the style profile exactly like the review
-  // path did, so the draft is compiled too.
+  // Compile the draft so a skipped or failed rewrite still gets the style.
   const draftPrompt = input.draftPrompt.trim();
   const compiledDraft = draftPrompt ? compileStyled(draftPrompt) : null;
   // A retry resends our own stored draft as the "override". That is the same string the template
@@ -547,12 +542,7 @@ async function generateCreatorPostImageRun(
         },
       })
     : null;
-  // The style profile is an Engine setting, not something the interpretation model owns. The
-  // rewrite is a text transformation, and it freely drops the style's positive tags and wording,
-  // so the rewritten text is compiled again before it reaches the provider. Without this the style
-  // applied only when the rewrite was skipped, failed, or was rejected — which is exactly why the
-  // setting looked intermittent rather than broken. The compiler dedupes against the prompt it is
-  // given, so a rewrite that kept its style is not styled twice.
+  // Reapply any style tags the rewrite dropped. The compiler keeps tags from appearing twice.
   const compiledRewrittenPrompt = rewrittenPrompt
     ? compileSlurpImagePrompt({
         kind: "illustration",
@@ -675,7 +665,7 @@ async function generateCreatorPostImageRun(
   // Chosen here rather than by each caller, so a scheduled or redrawn Story is a Story too (R1-052).
   const outputWidth = input.width ?? (input.story ? input.settings.storyImageWidth : input.settings.imageWidth);
   const outputHeight = input.height ?? (input.story ? input.settings.storyImageHeight : input.settings.imageHeight);
-  const companionRefs = input.settings.imageGenerationUseAvatarReferences && allowAvatarReferences;
+  const companionRefs = input.settings.imageGenerationUseAvatarReferences && allowReferences;
   if (referenceImages?.length || (companionRefs && inPicture.length)) {
     referenceImages = await slurpCompanionReferenceImages(input.characters, inPicture, finalPrompt, referenceImages);
     run.referenceImages = referenceImages?.length ?? 0;
@@ -718,8 +708,18 @@ async function generateCreatorPostImageRun(
     };
   }
 
-  const providerRequest = {
+  const providerReferences = await resolveSlurpLoreImageReferences(input.db, {
+    enabled: input.settings.enableLorebookContext && allowReferences && !input.suppressCharacterContext,
+    source: referenceSubject,
+    texts: [input.postContent, input.promptOverride?.prompt ?? input.draftPrompt],
+    redactIdentity,
     prompt: finalPrompt,
+    referenceImages,
+  });
+  run.referenceImages = providerReferences.referenceImages?.length ?? 0;
+
+  const providerRequest = {
+    prompt: providerReferences.prompt,
     negativePrompt: finalNegativePrompt,
     model: imageModel,
     width: outputWidth,
@@ -727,7 +727,7 @@ async function generateCreatorPostImageRun(
     imageEndpointId: input.imageConnection.imageEndpointId || undefined,
     comfyWorkflow: input.imageConnection.comfyuiWorkflow || undefined,
     imageDefaults,
-    referenceImages,
+    referenceImages: providerReferences.referenceImages,
     debugMode: input.debugMode,
     admissionMode: input.admissionMode,
     fallback: imageFallback,
@@ -789,8 +789,7 @@ async function generateCreatorPostImageRun(
       imageModel: imageModel || "unknown",
       imageStyleProfileId: compiledPrompt.profile.id,
       noodlerMediaPath: file.filePath,
-      // What the provider actually drew from, so every surface that shows or edits the picture's
-      // prompt shows this rather than the draft it started as.
+      // Keep the reusable prompt editable. Redraws resolve fresh lorebook references and guidance.
       imageProviderPrompt: finalPrompt,
     },
     preview: null,

@@ -12,6 +12,10 @@ Slurp uses direct Engine source references. It does not import Noodle account id
 
 All profiles, posts, subscriptions, unlocks, and audience actions are local roleplay state. Prices are fictional. They do not represent real payments, identity, or access control.
 
+## Lorebook pictures
+
+Turn on **Lorebook context** under **Backstage → Engine link** to use lorebook reference images in Slurp pictures. When an entry matches the caption or image prompt, Slurp can send its **Reference images** to an image service that accepts them. Existing avatar and companion references get the first slots, with up to six images in total.
+
 ## Autopurge
 
 Open **Slurp Settings → Autopurge** to remove old Slurp media before it fills local storage. Autopurge is off by default with a four-week retention window. It keeps posts, prompts, comments, and message history by default; you can instead remove complete old posts and optionally include old direct-message media.

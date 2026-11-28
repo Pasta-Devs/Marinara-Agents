@@ -1,5 +1,9 @@
 # Slurp release notes
 
+## 0.4.30 — 2026-11-28
+
+- With **Lorebook context** on, Slurp sends images from matching lorebook entries to compatible image connections.
+
 ## 0.4.29 — 2026-11-23
 
 - Changed: when a Marinara chat with a Creator carries Slurp activity, that Creator stops writing to you first on Slurp while you roleplay. The quiet ends 20 minutes after the last reply in that chat.
